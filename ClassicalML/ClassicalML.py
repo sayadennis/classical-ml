@@ -251,6 +251,7 @@ class ClassicalML():
 
     ## Function that will take X_train, y_train, run all the hyperparameter tuning, and record cross-validation performance 
     def record_tuning(self, X_train, y_train, X_test, y_test, outfn, multiclass=False):
+        X_train, y_train = self.confirm_numpy(X_train, y_train)
         X_test, y_test = self.confirm_numpy(X_test, y_test)
         tuner_dict = {
             "LRM" : self.lrm_cv,
