@@ -8,8 +8,8 @@ import pandas as pd
 sys.path.append('classical_ml')
 from ClassicalML import ClassicalML
 
-opts, extraparams = getopt.getopt(sys.argv[1:], 'i:l:o:i:', 
-                                  ['input=', 'label=', 'outfn=', 'indexdir='])
+opts, extraparams = getopt.getopt(sys.argv[1:], 'i:l:o:d:s:', 
+                                  ['input=', 'label=', 'outfn=', 'indexdir=', 'scoring='])
 
 for o,p in opts:
     if o in ['-i', '--input']:
@@ -18,8 +18,10 @@ for o,p in opts:
         labfn = p
     if o in ['-o', '--outfn']:
         outfn = p
-    if o in ['-i', '--indexdir']:
+    if o in ['-d', '--indexdir']:
         indexdir = p
+    if o in ['-s', '--scoring']:
+        scoring = p
 
 X = pd.read_csv(inputfn, index_col=0)
 y = pd.read_csv(labfn, index_col=0)
@@ -30,5 +32,5 @@ test_ix = pd.read_csv('%s/test_ix.csv' % (indexdir), header=None)
 X_train, X_test = X.iloc[train_ix[0]], X.iloc[test_ix[0]]
 y_train, y_test = y.iloc[train_ix[0]], y.iloc[test_ix[0]]
 
-m = ClassicalML()
+m = ClassicalML(scoring_metric=scoring)
 m.record_tuning(X_train, y_train, X_test, y_test, outfn=outfn, multiclass=False)
