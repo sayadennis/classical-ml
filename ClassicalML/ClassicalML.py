@@ -28,9 +28,10 @@ from sklearn.decomposition import NMF
 import matplotlib.pyplot as plt
 
 class ClassicalML():
-    def __init__(self, scoring_metric='accuracy_score'):
+    def __init__(self, scoring_metric='accuracy', nmf=False):
         super(ClassicalML).__init__()
         self.scoring_metric = scoring_metric
+        self.nmf = nmf
         self.lrm_params = {
             'C' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3]
         }
@@ -62,6 +63,8 @@ class ClassicalML():
             'colsample_bytree' : [0.3, 0.5, 0.7, 0.9],
             'gamma' : [0.1, 1, 2]
         }
+        self.best_model_name = None
+        self.best_model = None
     
     def confirm_numpy(self, X, y):
         # Function that will convert inputs into compatible format 
@@ -267,14 +270,19 @@ class ClassicalML():
             None, index=tuner_dict.keys(), 
             columns=['opt_params', f'crossval_{self.scoring_metric}', 'test_bal_acc', 'roc_auc', 'precision', 'recall', 'f1']
         )
+        trained_models = {}
         for model_key in tuner_dict.keys():
             opt_params, opt_score, clf = tuner_dict[model_key](X_train, y_train)
+            trained_models[model_key] = clf
             cv_record.loc[model_key]['opt_params'] = str(opt_params)
             cv_record.loc[model_key][f'crossval_{self.scoring_metric}'] = opt_score
             pf_dict = self.evaluate_model(clf, X_test, y_test, multiclass=multiclass)
             for pf_key in pf_dict:
                 cv_record.loc[model_key][pf_key] = pf_dict[pf_key]
         cv_record.to_csv(outfn, header=True, index=True)
+        # save best performing model
+        self.best_model_name = cv_record.iloc[np.argmax(cv_record[f'crossval_{self.scoring_metric}'])].name
+        self.best_model = trained_models[self.best_model_name]
         return
 
     ## Below is for NMF ## 
@@ -310,18 +318,26 @@ class ClassicalML():
                 group_list.append([genes_final])
         return genes_final
 
-    def record_tuning_NMF(self, X_train, y_train, X_test, y_test, outfn, k_list=None):
+    def record_tuning_NMF(self, X_train, y_train, X_test, y_test, outfn, k_list=None, multiclass=False):
+        # define k_list if not already explicitly defined
         if k_list is None:
-            k_list = [20, 50, 75, 100, 150, 200, 250, 300, 350, 400]
+            max_k = (X_train.shape[0] * X_train.shape[1]) // (X_train.shape[0] * X_train.shape[1])
+            # If max_k is larger than the number of rows or columns of X, lower max_k to that minimum value
+            max_k = np.min((max_k, X_train.shape[0], X_train.shape[1]))
+            if max_k >= 500:
+                k_list = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]
+            else:
+                max_k = (max_k // 100) * 100 # for example, if max_k=467, this sets max_k=400
+                k_list = list(np.arange(25, max_k+1, 25))
         
         tuner_dict = {
-            'LRM' : lrm_cv,
-            'SVM' : svm_cv,
-            'LASSO' : lasso_cv,
-            'ElasticNet' : elasticnet_cv,
-            'RF' : rf_cv,
-            'GB' : gb_cv,
-            'XGB' : xgb_cv
+            'LRM' : self.lrm_cv,
+            'SVM' : self.svm_cv,
+            'LASSO' : self.lasso_cv,
+            'ElasticNet' : self.elasticnet_cv,
+            'RF' : self.rf_cv,
+            'GB' : self.gb_cv,
+            'XGB' : self.xgb_cv
         }
 
         cv_record = pd.DataFrame(
@@ -334,7 +350,7 @@ class ClassicalML():
         cv_record['NMF_k'] = np.repeat(np.array(k_list).reshape((-1,1)), repeats=len(list(tuner_dict.keys())), axis=1).T.ravel()
 
         for k in k_list:
-            F_train, F_test, _ = get_F(k, X_train, y_train, X_test, y_test)
+            F_train, F_test, _ = self.get_F(k, X_train, y_train, X_test, y_test)
             for model_key in tuner_dict.keys():
                 opt_params, opt_score, clf = tuner_dict[model_key](F_train, y_train)
                 bool_loc = np.array(
@@ -344,7 +360,7 @@ class ClassicalML():
                 )
                 cv_record.loc[bool_loc, [x == 'opt_params' for x in cv_record.columns]] = str(opt_params)
                 cv_record.loc[bool_loc, [x == f'crossval_{self.scoring_metric}' for x in cv_record.columns]] = opt_score
-                pf_dict = evaluate_model(clf, F_test, y_test)
+                pf_dict = self.evaluate_model(clf, F_test, y_test)
                 for pf_key in pf_dict:
                     cv_record.loc[bool_loc, [x == pf_key for x in cv_record.columns]] = pf_dict[pf_key]
         cv_record.to_csv(outfn, header=True, index=True)
