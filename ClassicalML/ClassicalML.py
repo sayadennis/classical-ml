@@ -83,7 +83,7 @@ class ClassicalML():
     def lrm_cv(self, X_train, y_train, seed=0):
         # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsLR = GridSearchCV(
-            LogisticRegression(penalty='l2', class_weight='balanced', max_iter=1000, random_state=seed),
+            LogisticRegression(penalty='l2', class_weight='balanced', max_iter=3000, random_state=seed),
             param_grid=self.lrm_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
             cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
         )
@@ -100,7 +100,7 @@ class ClassicalML():
     def lasso_cv(self, X_train, y_train, seed=0):
         # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsLS = GridSearchCV(
-            LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced', max_iter=1000, random_state=seed),
+            LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=seed),
             param_grid=self.lasso_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
             cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
         )
@@ -117,7 +117,7 @@ class ClassicalML():
     def elasticnet_cv(self, X_train, y_train, seed=0):
         # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsEN = GridSearchCV(
-            LogisticRegression(penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=1000, random_state=seed),
+            LogisticRegression(penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=seed),
             param_grid=self.elasticnet_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
             cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
         )
@@ -135,7 +135,7 @@ class ClassicalML():
     def svm_cv(self, X_train, y_train, seed=0):
         # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsCV = GridSearchCV(
-            SVC(class_weight='balanced', max_iter=1000, probability=True, random_state=seed),  #, decision_function_shape='ovr'
+            SVC(class_weight='balanced', max_iter=3000, probability=True, random_state=seed),  #, decision_function_shape='ovr'
             param_grid=self.svm_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
             cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
         )
@@ -321,7 +321,7 @@ class ClassicalML():
     def record_tuning_NMF(self, X_train, y_train, X_test, y_test, outfn, k_list=None, multiclass=False):
         # define k_list if not already explicitly defined
         if k_list is None:
-            max_k = (X_train.shape[0] * X_train.shape[1]) // (X_train.shape[0] * X_train.shape[1])
+            max_k = (X_train.shape[0] * X_train.shape[1]) // (X_train.shape[0] + X_train.shape[1])
             # If max_k is larger than the number of rows or columns of X, lower max_k to that minimum value
             max_k = np.min((max_k, X_train.shape[0], X_train.shape[1]))
             if max_k >= 500:
@@ -344,15 +344,20 @@ class ClassicalML():
             None, index=np.arange(len(list(tuner_dict))*len(k_list)),
             columns=['model', 'NMF_k', 'opt_params', f'crossval_{self.scoring_metric}', 'test_bal_acc', 'roc_auc', 'precision', 'recall', 'f1']
         )
+        trained_models = {}
 
         # fill in models and NMF_k by all possible combinations
         cv_record['model'] = np.repeat(list(tuner_dict.keys()), repeats=len(k_list))
         cv_record['NMF_k'] = np.repeat(np.array(k_list).reshape((-1,1)), repeats=len(list(tuner_dict.keys())), axis=1).T.ravel()
 
         for k in k_list:
-            F_train, F_test, _ = self.get_F(k, X_train, y_train, X_test, y_test)
+            trained_models[k] = {}
+            F_train, F_test, W = self.get_F(k, X_train, y_train, X_test, y_test)
             for model_key in tuner_dict.keys():
                 opt_params, opt_score, clf = tuner_dict[model_key](F_train, y_train)
+                trained_models[k][model_key] = {}
+                trained_models[k][model_key]['model'] = clf
+                trained_models[k][model_key]['mxs'] = [F_train, F_test, W]
                 bool_loc = np.array(
                     [x == model_key for x in cv_record['model']]
                 ) & np.array(
@@ -364,4 +369,9 @@ class ClassicalML():
                 for pf_key in pf_dict:
                     cv_record.loc[bool_loc, [x == pf_key for x in cv_record.columns]] = pf_dict[pf_key]
         cv_record.to_csv(outfn, header=True, index=True)
+        # save best performing model
+        self.best_model_name = cv_record['model'].iloc[np.argmax(cv_record[f'crossval_{self.scoring_metric}'])]
+        self.best_k = cv_record['NMF_k'].iloc[np.argmax(cv_record[f'crossval_{self.scoring_metric}'])]
+        self.best_model = trained_models[self.best_k][self.best_model_name]['model']
+        self.factorized = trained_models[self.best_k][self.best_model_name]['mxs']
         return
