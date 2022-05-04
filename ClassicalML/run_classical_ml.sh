@@ -17,6 +17,7 @@ python classical_ml/ClassicalML/run_classical_ml.py \
     --outfn /home/srd6051/classical_ml_test.csv \
     --indexdir /projects/b1122/saya/indices/ \
     --scoring accuracy \
-    --nmf 500
+    --nmf 500 \
+    --savemodel "true"
 
 # --mem=0
