@@ -5,8 +5,6 @@ import datetime
 import numpy as np
 import pandas as pd
 import pickle
-
-sys.path.append('classical_ml')
 from ClassicalML import ClassicalML
 
 opts, extraparams = getopt.getopt(sys.argv[1:], 'i:l:o:d:s:n:v:', 
@@ -36,11 +34,20 @@ for o,p in opts:
 X = pd.read_csv(inputfn, index_col=0)
 y = pd.read_csv(labfn, index_col=0)
 
-train_ix = pd.read_csv('%s/train_ix.csv' % (indexdir), header=None)
-test_ix = pd.read_csv('%s/test_ix.csv' % (indexdir), header=None)
+train_ix = pd.read_csv(f'{indexdir}/train_ix.csv', header=None).to_numpy().ravel()
+test_ix = pd.read_csv(f'{indexdir}/test_ix.csv', header=None).to_numpy().ravel()
 
-X_train, X_test = X.iloc[train_ix[0]], X.iloc[test_ix[0]]
-y_train, y_test = y.iloc[train_ix[0]], y.iloc[test_ix[0]]
+# split based on indices 
+X_train, X_test = X.iloc[[i in train_ix for i in X.index],:], X.iloc[[i in test_ix for i in X.index],:]
+y_train, y_test = y.iloc[[i in train_ix for i in y.index],:], y.iloc[[i in test_ix for i in y.index],:]
+# align order
+y_train = y_train.loc[X_train.index,:]
+y_test = y_test.loc[X_test.index,:]
+# print shapes 
+print(f'X_train shape: {X_train.shape}')
+print(f'X_test shape: {X_test.shape}')
+print(f'y_train shape: {y_train.shape}')
+print(f'y_test shape: {y_test.shape}')
 
 m = ClassicalML(scoring_metric=scoring)
 
@@ -48,7 +55,6 @@ if nmf: # tune ML with NMF
     m.record_tuning_NMF(X_train, y_train, X_test, y_test, outfn=outfn, multiclass=False) # k_list=[20,40,60], 
 else: # tune regular ML without NMF
     m.record_tuning(X_train, y_train, X_test, y_test, outfn=outfn, multiclass=False)
-
 
 if save_model:
     inputname = inputfn.split('/')[-1].split('.')[0]
