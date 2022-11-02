@@ -81,7 +81,6 @@ class ClassicalML():
 
     # Logistic regression 
     def lrm_cv(self, X_train, y_train, seed=0):
-        # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsLR = GridSearchCV(
             LogisticRegression(penalty='l2', class_weight='balanced', max_iter=3000, random_state=seed),
             param_grid=self.lrm_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
@@ -94,11 +93,10 @@ class ClassicalML():
                 (gsLR.cv_results_['param_C'] == opt_params['C'])
             ]
         )
-        return opt_params, opt_mean_score, gsLR
+        return opt_params, opt_mean_score, gsLR.best_estimator_
 
     # LASSO cross-validation
     def lasso_cv(self, X_train, y_train, seed=0):
-        # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsLS = GridSearchCV(
             LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=seed),
             param_grid=self.lasso_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
@@ -111,11 +109,10 @@ class ClassicalML():
                 (gsLS.cv_results_['param_C'] == opt_params['C'])
             ]
         )
-        return opt_params, opt_mean_score, gsLS
+        return opt_params, opt_mean_score, gsLS.best_estimator_
 
     # Elastic Net cross-validation 
     def elasticnet_cv(self, X_train, y_train, seed=0):
-        # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsEN = GridSearchCV(
             LogisticRegression(penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=seed),
             param_grid=self.elasticnet_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
@@ -129,11 +126,10 @@ class ClassicalML():
                 (gsEN.cv_results_['param_l1_ratio'] == opt_params['l1_ratio'])
             ]
         )
-        return opt_params, opt_mean_score, gsEN
+        return opt_params, opt_mean_score, gsEN.best_estimator_
 
     # Support vector machine cross-validation 
     def svm_cv(self, X_train, y_train, seed=0):
-        # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsCV = GridSearchCV(
             SVC(class_weight='balanced', max_iter=3000, probability=True, random_state=seed),  #, decision_function_shape='ovr'
             param_grid=self.svm_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
@@ -148,11 +144,10 @@ class ClassicalML():
                 (gsCV.cv_results_['param_gamma'] == opt_params['gamma'])
             ]
         )
-        return opt_params, opt_mean_score, gsCV
+        return opt_params, opt_mean_score, gsCV.best_estimator_
 
     # Random Forest cross-validation
     def rf_cv(self, X_train, y_train, seed=0):
-        # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsRF = GridSearchCV(
             RandomForestClassifier(n_estimators=300, criterion='gini', max_features='auto', class_weight='balanced', n_jobs=8, random_state=seed),
             param_grid=self.rf_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
@@ -166,11 +161,10 @@ class ClassicalML():
                 (gsRF.cv_results_['param_min_samples_leaf'] == opt_params['min_samples_leaf'])
             ]
         )
-        return opt_params, opt_mean_score, gsRF
+        return opt_params, opt_mean_score, gsRF.best_estimator_
 
     # Gradient Boosting cross-validation
     def gb_cv(self, X_train, y_train, seed=0):
-        # X_train, y_train = self.confirm_numpy(X_train, y_train)
         gsGB = GridSearchCV(
             GradientBoostingClassifier(subsample=0.8, random_state=seed),
             param_grid=self.gb_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
@@ -185,11 +179,10 @@ class ClassicalML():
                 (gsGB.cv_results_['param_max_depth'] == opt_params['max_depth'])
             ]
         )
-        return opt_params, opt_mean_score, gsGB
+        return opt_params, opt_mean_score, gsGB.best_estimator_
 
     # XGBoost
     def xgb_cv(self, X_train, y_train, seed=0):
-        # X_train, y_train = self.confirm_numpy(X_train, y_train)
         # use regular GridSearchCV
         gsXGB = GridSearchCV(
             xgb.XGBClassifier(objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=seed),
@@ -255,6 +248,7 @@ class ClassicalML():
 
     ## Function that will take X_train, y_train, run all the hyperparameter tuning, and record cross-validation performance 
     def record_tuning(self, X_train, y_train, X_test, y_test, outfn, multiclass=False):
+        self.feature_names = list(X_train.columns)
         X_train, y_train = self.confirm_numpy(X_train, y_train)
         X_test, y_test = self.confirm_numpy(X_test, y_test)
         tuner_dict = {
@@ -264,26 +258,25 @@ class ClassicalML():
             'ElasticNet' : self.elasticnet_cv,
             'RF' : self.rf_cv,
             'GB' : self.gb_cv,
-            'XGB' : self.xgb_cv
+            'XGB' : self.xgb_cv,
         }
         cv_record = pd.DataFrame(
             None, index=tuner_dict.keys(), 
             columns=['opt_params', f'crossval_{self.scoring_metric}', 'test_bal_acc', 'roc_auc', 'precision', 'recall', 'f1']
         )
         trained_models = {}
-        for model_key in tuner_dict.keys():
-            opt_params, opt_score, clf = tuner_dict[model_key](X_train, y_train)
-            trained_models[model_key] = clf
-            cv_record.loc[model_key]['opt_params'] = str(opt_params)
-            cv_record.loc[model_key][f'crossval_{self.scoring_metric}'] = opt_score
+        for model_name in tuner_dict.keys():
+            opt_params, opt_score, clf = tuner_dict[model_name](X_train, y_train)
+            trained_models[model_name] = clf
+            cv_record.loc[model_name]['opt_params'] = str(opt_params)
+            cv_record.loc[model_name][f'crossval_{self.scoring_metric}'] = opt_score
             pf_dict = self.evaluate_model(clf, X_test, y_test, multiclass=multiclass)
             for pf_key in pf_dict:
-                cv_record.loc[model_key][pf_key] = pf_dict[pf_key]
+                cv_record.loc[model_name][pf_key] = pf_dict[pf_key]
         cv_record.to_csv(outfn, header=True, index=True)
         # save best performing model
         self.best_model_name = cv_record.iloc[np.argmax(cv_record[f'crossval_{self.scoring_metric}'])].name
         self.best_model = trained_models[self.best_model_name]
-        return
 
     ## Below is for NMF ## 
     def get_F(self, k, X_train, y_train, X_test, y_test):
@@ -353,13 +346,13 @@ class ClassicalML():
         for k in k_list:
             trained_models[k] = {}
             F_train, F_test, W = self.get_F(k, X_train, y_train, X_test, y_test)
-            for model_key in tuner_dict.keys():
-                opt_params, opt_score, clf = tuner_dict[model_key](F_train, y_train)
-                trained_models[k][model_key] = {}
-                trained_models[k][model_key]['model'] = clf
-                trained_models[k][model_key]['mxs'] = [F_train, F_test, W]
+            for model_name in tuner_dict.keys():
+                opt_params, opt_score, clf = tuner_dict[model_name](F_train, y_train)
+                trained_models[k][model_name] = {}
+                trained_models[k][model_name]['model'] = clf
+                trained_models[k][model_name]['mxs'] = [F_train, F_test, W]
                 bool_loc = np.array(
-                    [x == model_key for x in cv_record['model']]
+                    [x == model_name for x in cv_record['model']]
                 ) & np.array(
                     [x == k for x in cv_record['NMF_k']]
                 )
@@ -374,4 +367,3 @@ class ClassicalML():
         self.best_k = cv_record['NMF_k'].iloc[np.argmax(cv_record[f'crossval_{self.scoring_metric}'])]
         self.best_model = trained_models[self.best_k][self.best_model_name]['model']
         self.factorized = trained_models[self.best_k][self.best_model_name]['mxs']
-        return
