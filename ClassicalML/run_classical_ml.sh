@@ -10,7 +10,7 @@
 
 module purge all
 module load python-miniconda3/4.12.0
-source activate bbcarenv
+source activate classical-ml
 
 python classical-ml/ClassicalML/run_classical_ml.py \
     --input /projects/b1131/saya/bbcar/data/02b_cnv/06_modified_data/all/reg_thres_conf90_all_studyindex.csv \
