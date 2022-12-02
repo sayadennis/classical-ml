@@ -38,8 +38,10 @@ train_ix = pd.read_csv(f'{indexdir}/train_ix.csv', header=None).to_numpy().ravel
 test_ix = pd.read_csv(f'{indexdir}/test_ix.csv', header=None).to_numpy().ravel()
 
 # split based on indices 
-X_train, X_test = X.iloc[[i in train_ix for i in X.index],:], X.iloc[[i in test_ix for i in X.index],:]
-y_train, y_test = y.iloc[[i in train_ix for i in y.index],:], y.iloc[[i in test_ix for i in y.index],:]
+# X_train, X_test = X.iloc[[i in train_ix for i in X.index],:], X.iloc[[i in test_ix for i in X.index],:]
+# y_train, y_test = y.iloc[[i in train_ix for i in y.index],:], y.iloc[[i in test_ix for i in y.index],:]
+X_train, X_test = X.iloc[train_ix,:], X.iloc[test_ix,:]
+y_train, y_test = y.iloc[train_ix,:], y.iloc[test_ix,:]
 # align order
 y_train = y_train.loc[X_train.index,:]
 y_test = y_test.loc[X_test.index,:]

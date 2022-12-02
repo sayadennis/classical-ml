@@ -1,23 +1,21 @@
 #!/bin/bash
 #SBATCH -A b1042
 #SBATCH -p genomics
-#SBATCH -t 48:00:00
-#SBATCH -n 12
+#SBATCH -t 1:00:00
+#SBATCH -n 8
 #SBATCH --mail-user=sayarenedennis@northwestern.edu
 #SBATCH --mail-type=END,FAIL
-#SBATCH --job-name="clasml"
-#SBATCH --output=/home/srd6051/run_classical_ml.out
+#SBATCH --job-name="clsclml"
+#SBATCH --output=test_classical_ml.out
 
-. ~/anaconda3/etc/profile.d/conda.sh
-conda activate bbcarenv
+module purge all
+module load python-miniconda3/4.12.0
+source activate bbcarenv
 
-python classical_ml/ClassicalML/run_classical_ml.py \
-    --input /projects/b1122/saya/06_modified_data/reg_thres_conf90_studyindex.csv \
-    --label /projects/b1122/saya/bbcar_label_studyindex.csv \
+python classical-ml/ClassicalML/run_classical_ml.py \
+    --input /projects/b1131/saya/bbcar/data/02b_cnv/06_modified_data/all/reg_thres_conf90_all_studyindex.csv \
+    --label /projects/b1131/saya/bbcar/data/02b_cnv/bbcar_label_studyid.csv \
     --outfn /home/srd6051/classical_ml_test.csv \
-    --indexdir /projects/b1122/saya/indices/ \
+    --indexdir /projects/b1131/saya/bbcar/data/02b_cnv/indices/ \
     --scoring accuracy \
-    --nmf 500 \
-    --savemodel "true"
-
-# --mem=0
+    --savemodel ~/testmodels/
