@@ -7,8 +7,6 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-# from sklearn.linear_model import Lasso # using LR so no need to load 
-# from sklearn.linear_model import ElasticNet # using LR so no need to load 
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
@@ -30,44 +28,71 @@ from sklearn.decomposition import NMF
 import matplotlib.pyplot as plt
 
 class ClassicalML():
-    def __init__(self, scoring_metric='accuracy', nmf=False, standardscale=True):
+    def __init__(self, scoring_metric='accuracy', nmf=False, standardscale=True, seed=42):
         super(ClassicalML).__init__()
+        self.seed = seed
         self.scoring_metric = scoring_metric
         self.nmf = nmf
         self.standardscale = standardscale
         if (self.nmf & self.standardscale):
             raise ValueError('Cannot have both nmf=True and standardscale=True because ' \
                              'standard-scaling results in negative values.')
-        self.lrm_params = {
-            'classifier__C' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3]
+        self.models = {
+            'LRM' : LogisticRegression(
+                penalty='l2', class_weight='balanced', max_iter=3000, random_state=self.seed
+            ),
+            'LASSO' : LogisticRegression(
+                penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=self.seed
+            ),
+            'ElasticNet' : LogisticRegression(
+                penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=self.seed
+            ),
+            'SVM' : SVC(
+                class_weight='balanced', max_iter=3000, probability=True, random_state=self.seed
+            ), #, decision_function_shape='ovr'
+            'RF' : RandomForestClassifier(
+                n_estimators=300, criterion='gini', max_features='auto', 
+                class_weight='balanced', n_jobs=8, random_state=self.seed
+            ),
+            'GB' : GradientBoostingClassifier(
+                subsample=0.8, random_state=self.seed
+            ),
+            'XGB' : xgb.XGBClassifier(
+                objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=self.seed
+            ),
         }
-        self.lasso_params = {
-            'classifier__C' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3]
-        }
-        self.elasticnet_params = {
-            'classifier__C' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3],
-            'classifier__l1_ratio' : np.arange(0.1, 1., step=0.1)
-        }
-        self.svm_params = {
-            'classifier__kernel' : ['linear', 'rbf'], 
-            'classifier__C' : [1e-3, 1e-2, 1e-1, 1e+0, 1e+1, 1e+2, 1e+3],
-            'classifier__gamma' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3]
-        }
-        self.rf_params = {
-            # 'criterion' : ['gini', 'entropy'],
-            'classifier__max_depth' : [3, 5, 10, 25, 50], # or could set min_samples_split 
-            'classifier__min_samples_leaf' : [2, 4, 6, 8, 10, 15, 20]
-        }
-        self.gb_params = {
-            'classifier__loss' : ['deviance', 'exponential'],
-            'classifier__min_samples_split' : [2, 6, 10, 15, 20],
-            'classifier__max_depth' : [5, 10, 25, 50, 75]
-        }
-        self.xgb_params = {
-            'classifier__learning_rate' : [0.01, 0.1, 0.2],
-            'classifier__max_depth' : [5, 10, 15, 25],
-            'classifier__colsample_bytree' : [0.3, 0.5, 0.7, 0.9],
-            'classifier__gamma' : [0.1, 1, 2]
+        self.model_params = {
+            'LRM' : {
+                'classifier__C' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3]
+            },
+            'LASSO' : {
+                'classifier__C' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3]
+            },
+            'ElasticNet' : {
+                'classifier__C' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3],
+                'classifier__l1_ratio' : np.arange(0.1, 1., step=0.1)
+            },
+            'SVM' : {
+                'classifier__kernel' : ['linear', 'rbf'], 
+                'classifier__C' : [1e-3, 1e-2, 1e-1, 1e+0, 1e+1, 1e+2, 1e+3],
+                'classifier__gamma' : [1e-3, 1e-2, 1e-1, 1., 1e+1, 1e+2, 1e+3]
+            }, #, decision_function_shape='ovr'
+            'RF' : {
+                # 'criterion' : ['gini', 'entropy'],
+                'classifier__max_depth' : [3, 5, 10, 25, 50], # or could set min_samples_split 
+                'classifier__min_samples_leaf' : [2, 4, 6, 8, 10, 15, 20]
+            },
+            'GB' : {
+                'classifier__loss' : ['deviance', 'exponential'],
+                'classifier__min_samples_split' : [2, 6, 10, 15, 20],
+                'classifier__max_depth' : [5, 10, 25, 50, 75]
+            },
+            'XGB' : {
+                'classifier__learning_rate' : [0.01, 0.1, 0.2],
+                'classifier__max_depth' : [5, 10, 15, 25],
+                'classifier__colsample_bytree' : [0.3, 0.5, 0.7, 0.9],
+                'classifier__gamma' : [0.1, 1, 2]
+            },
         }
         self.best_model_name = None
         self.best_model = None
@@ -97,23 +122,16 @@ class ClassicalML():
             else:
                 max_k = (max_k // 100) * 100 # for example, if max_k=467, this sets max_k=400
                 self.nmf_params = {'nmf__n_components' : list(np.arange(25, max_k+1, 25))}
+        else:
+            self.nmf_params = {}
         y_train = np.array(y_train).ravel(); y_test = np.array(y_test).ravel()
-        tuner_dict = {
-            'LRM' : self.lrm_cv,
-            'SVM' : self.svm_cv,
-            'LASSO' : self.lasso_cv,
-            'ElasticNet' : self.elasticnet_cv,
-            'RF' : self.rf_cv,
-            'GB' : self.gb_cv,
-            'XGB' : self.xgb_cv,
-        }
         cv_record = pd.DataFrame(
-            None, index=tuner_dict.keys(), 
+            None, index=self.models.keys(), 
             columns=['opt_params', f'crossval_{self.scoring_metric}', 'test_bal_acc', 'roc_auc', 'precision', 'recall', 'f1']
         )
         trained_models = {}
-        for model_name in tuner_dict.keys():
-            opt_params, opt_score, clf = tuner_dict[model_name](X_train, y_train)
+        for model_name in self.models.keys():
+            opt_params, opt_score, clf = self.clf_crossval(X_train, y_train, model_name=model_name)
             trained_models[model_name] = clf
             cv_record.loc[model_name]['opt_params'] = str(opt_params)
             cv_record.loc[model_name][f'crossval_{self.scoring_metric}'] = opt_score
@@ -125,289 +143,30 @@ class ClassicalML():
         self.best_model_name = cv_record.iloc[np.argmax(cv_record[f'crossval_{self.scoring_metric}'])].name
         self.best_model = trained_models[self.best_model_name]
 
-    # Logistic regression 
-    def lrm_cv(self, X_train, y_train, seed=0):
+    def clf_crossval(self, X_train, y_train, model_name):
         if self.standardscale:
             scaler = StandardScaler()
-            clf = LogisticRegression(penalty='l2', class_weight='balanced', max_iter=3000, random_state=seed)
+            clf = self.models[model_name]
             pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-            gsLR = GridSearchCV(
-                pipe,
-                param_grid=self.lrm_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsLR.fit(X_train, y_train)
-            opt_params = gsLR.best_params_
-            opt_mean_score = np.mean(
-                gsLR.cv_results_['mean_test_score'][
-                    (gsLR.cv_results_['param_classifier__C'] == opt_params['classifier__C'])
-                ]
-            )
         elif self.nmf:
             nmf = NMF(init='nndsvd', random_state=24)
-            clf = LogisticRegression(penalty='l2', class_weight='balanced', max_iter=3000, random_state=seed)
+            clf = self.models[model_name]
             pipe = Pipeline([('nmf', nmf), ('classifier', clf)])
-            gsLR = GridSearchCV(
-                pipe,
-                param_grid=(self.nmf_params | self.lrm_params), n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsLR.fit(X_train, y_train)
-            opt_params = gsLR.best_params_
-            opt_mean_score = np.mean(
-                gsLR.cv_results_['mean_test_score'][
-                    (gsLR.cv_results_['param_nmf__n_components'] == opt_params['nmf__n_components']) & 
-                    (gsLR.cv_results_['param_classifier__C'] == opt_params['classifier__C'])
-                ]
-            )
-        return opt_params, opt_mean_score, gsLR.best_estimator_
-
-    # LASSO cross-validation
-    def lasso_cv(self, X_train, y_train, seed=0):
-        if self.standardscale:
-            scaler = StandardScaler()
-            clf = LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=seed)
-            pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-            gsLS = GridSearchCV(
-                pipe,
-                param_grid=self.lasso_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsLS.fit(X_train, y_train)
-            opt_params = gsLS.best_params_
-            opt_mean_score = np.mean(
-                gsLS.cv_results_['mean_test_score'][
-                    (gsLS.cv_results_['param_classifier__C'] == opt_params['classifier__C'])
-                ]
-            )
-        elif self.nmf:
-            nmf = NMF(init='nndsvd', random_state=24)
-            clf = LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=seed)
-            pipe = Pipeline([('nmf', nmf), ('classifier', clf)])
-            gsLS = GridSearchCV(
-                pipe,
-                param_grid=(self.nmf_params | self.lasso_params), n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsLS.fit(X_train, y_train)
-            opt_params = gsLS.best_params_
-            opt_mean_score = np.mean(
-                gsLS.cv_results_['mean_test_score'][
-                    (gsLS.cv_results_['param_nmf__n_components'] == opt_params['nmf__n_components']) & 
-                    (gsLS.cv_results_['param_classifier__C'] == opt_params['classifier__C'])
-                ]
-            )
-        return opt_params, opt_mean_score, gsLS.best_estimator_
-
-    # Elastic Net cross-validation 
-    def elasticnet_cv(self, X_train, y_train, seed=0):
-        if self.standardscale:
-            scaler = StandardScaler()
-            clf = LogisticRegression(penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=seed)
-            pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-            gsEN = GridSearchCV(
-                pipe,
-                param_grid=self.elasticnet_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsEN.fit(X_train, y_train)
-            opt_params = gsEN.best_params_
-            opt_mean_score = np.mean(
-                gsEN.cv_results_['mean_test_score'][
-                    (gsEN.cv_results_['param_classifier__C'] == opt_params['classifier__C']) &
-                    (gsEN.cv_results_['param_classifier__l1_ratio'] == opt_params['classifier__l1_ratio'])
-                ]
-            )
-        elif self.nmf:
-            nmf = NMF(init='nndsvd', random_state=24)
-            clf = LogisticRegression(penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=seed)
-            pipe = Pipeline([('nmf', nmf), ('classifier', clf)])
-            gsEN = GridSearchCV(
-                pipe,
-                param_grid=(self.nmf_params | self.elasticnet_params), n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsEN.fit(X_train, y_train)
-            opt_params = gsEN.best_params_
-            opt_mean_score = np.mean(
-                gsEN.cv_results_['mean_test_score'][
-                    (gsEN.cv_results_['param_nmf__n_components'] == opt_params['nmf__n_components']) & 
-                    (gsEN.cv_results_['param_classifier__C'] == opt_params['classifier__C']) &
-                    (gsEN.cv_results_['param_classifier__l1_ratio'] == opt_params['classifier__l1_ratio'])
-                ]
-            )
-        return opt_params, opt_mean_score, gsEN.best_estimator_
-
-    # Support vector machine cross-validation 
-    def svm_cv(self, X_train, y_train, seed=0):
-        if self.standardscale:
-            scaler = StandardScaler()
-            clf = SVC(class_weight='balanced', max_iter=3000, probability=True, random_state=seed) #, decision_function_shape='ovr'
-            pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-            gsCV = GridSearchCV(
-                pipe,
-                param_grid=self.svm_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsCV.fit(X_train, y_train)
-            opt_params = gsCV.best_params_
-            opt_mean_score = np.mean(
-                gsCV.cv_results_['mean_test_score'][
-                    (gsCV.cv_results_['param_classifier__kernel'] == opt_params['classifier__kernel']) & 
-                    (gsCV.cv_results_['param_classifier__C'] == opt_params['classifier__C']) & 
-                    (gsCV.cv_results_['param_classifier__gamma'] == opt_params['classifier__gamma'])
-                ]
-            )
-        elif self.nmf:
-            nmf = NMF(init='nndsvd', random_state=24)
-            clf = SVC(class_weight='balanced', max_iter=3000, probability=True, random_state=seed) #, decision_function_shape='ovr'
-            pipe = Pipeline([('nmf', nmf), ('classifier', clf)])
-            gsCV = GridSearchCV(
-                pipe,
-                param_grid=(self.nmf_params | self.svm_params), n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsCV.fit(X_train, y_train)
-            opt_params = gsCV.best_params_
-            opt_mean_score = np.mean(
-                gsCV.cv_results_['mean_test_score'][
-                    (gsCV.cv_results_['param_nmf__n_components'] == opt_params['nmf__n_components']) & 
-                    (gsCV.cv_results_['param_classifier__kernel'] == opt_params['classifier__kernel']) & 
-                    (gsCV.cv_results_['param_classifier__C'] == opt_params['classifier__C']) & 
-                    (gsCV.cv_results_['param_classifier__gamma'] == opt_params['classifier__gamma'])
-                ]
-            )
+        else:
+            clf = self.models[model_name]
+            pipe = Pipeline([('classifier', clf)])
+        # 
+        gsCV = GridSearchCV(
+            pipe,
+            param_grid=(self.nmf_params | self.model_params[model_name]), n_jobs=8, scoring=self.scoring_metric, refit=True,
+            cv=StratifiedKFold(n_splits=5, random_state=self.seed, shuffle=True)
+        )
+        gsCV.fit(X_train, y_train)
+        opt_params = gsCV.best_params_
+        opt_mean_score = np.mean(gsCV.cv_results_['mean_test_score'][
+            np.all([(gsCV.cv_results_[f'param_{param_name}'] == opt_params[param_name]) for param_name in opt_params.keys()], axis=0)
+        ])
         return opt_params, opt_mean_score, gsCV.best_estimator_
-
-    # Random Forest cross-validation
-    def rf_cv(self, X_train, y_train, seed=0):
-        if self.standardscale:
-            scaler = StandardScaler()
-            clf = RandomForestClassifier(n_estimators=300, criterion='gini', max_features='auto', class_weight='balanced', n_jobs=8, random_state=seed)
-            pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-            gsRF = GridSearchCV(
-                pipe,
-                param_grid=self.rf_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsRF.fit(X_train, y_train)
-            opt_params = gsRF.best_params_
-            opt_mean_score = np.mean(
-                gsRF.cv_results_['mean_test_score'][
-                    (gsRF.cv_results_['param_classifier__max_depth'] == opt_params['classifier__max_depth']) &
-                    (gsRF.cv_results_['param_classifier__min_samples_leaf'] == opt_params['classifier__min_samples_leaf'])
-                ]
-            )
-        elif self.nmf:
-            nmf = NMF(init='nndsvd', random_state=24)
-            clf = RandomForestClassifier(n_estimators=300, criterion='gini', max_features='auto', class_weight='balanced', n_jobs=8, random_state=seed)
-            pipe = Pipeline([('nmf', nmf), ('classifier', clf)])
-            gsRF = GridSearchCV(
-                pipe,
-                param_grid=(self.nmf_params | self.rf_params), n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsRF.fit(X_train, y_train)
-            opt_params = gsRF.best_params_
-            opt_mean_score = np.mean(
-                gsRF.cv_results_['mean_test_score'][
-                    (gsRF.cv_results_['param_nmf__n_components'] == opt_params['nmf__n_components']) & 
-                    (gsRF.cv_results_['param_classifier__max_depth'] == opt_params['classifier__max_depth']) &
-                    (gsRF.cv_results_['param_classifier__min_samples_leaf'] == opt_params['classifier__min_samples_leaf'])
-                ]
-            )
-        return opt_params, opt_mean_score, gsRF.best_estimator_
-
-    # Gradient Boosting cross-validation
-    def gb_cv(self, X_train, y_train, seed=0):
-        if self.standardscale:
-            scaler = StandardScaler()
-            clf = GradientBoostingClassifier(subsample=0.8, random_state=seed)
-            pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-            gsGB = GridSearchCV(
-                pipe,
-                param_grid=self.gb_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsGB.fit(X_train, y_train)
-            opt_params = gsGB.best_params_
-            opt_mean_score = np.mean(
-                gsGB.cv_results_['mean_test_score'][
-                    (gsGB.cv_results_['param_classifier__loss'] == opt_params['classifier__loss']) &
-                    (gsGB.cv_results_['param_classifier__min_samples_split'] == opt_params['classifier__min_samples_split']) &
-                    (gsGB.cv_results_['param_classifier__max_depth'] == opt_params['classifier__max_depth'])
-                ]
-            )
-        elif self.nmf:
-            nmf = NMF(init='nndsvd', random_state=24)
-            clf = GradientBoostingClassifier(subsample=0.8, random_state=seed)
-            pipe = Pipeline([('nmf', nmf), ('classifier', clf)])
-            gsGB = GridSearchCV(
-                pipe,
-                param_grid=(self.nmf_params | self.gb_params), n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsGB.fit(X_train, y_train)
-            opt_params = gsGB.best_params_
-            opt_mean_score = np.mean(
-                gsGB.cv_results_['mean_test_score'][
-                    (gsGB.cv_results_['param_nmf__n_components'] == opt_params['nmf__n_components']) & 
-                    (gsGB.cv_results_['param_classifier__loss'] == opt_params['classifier__loss']) &
-                    (gsGB.cv_results_['param_classifier__min_samples_split'] == opt_params['classifier__min_samples_split']) &
-                    (gsGB.cv_results_['param_classifier__max_depth'] == opt_params['classifier__max_depth'])
-                ]
-            )
-        return opt_params, opt_mean_score, gsGB.best_estimator_
-
-    # XGBoost
-    def xgb_cv(self, X_train, y_train, seed=0):
-        if self.standardscale:
-            scaler = StandardScaler()
-            clf = xgb.XGBClassifier(objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=seed)
-            pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-            gsXGB = GridSearchCV(
-                pipe,
-                param_grid=self.xgb_params, n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsXGB.fit(X_train, y_train)
-            opt_params = gsXGB.best_params_
-            opt_mean_score = np.mean(
-                gsXGB.cv_results_['mean_test_score'][
-                    (gsXGB.cv_results_['param_classifier__learning_rate'] == opt_params['classifier__learning_rate']) &
-                    (gsXGB.cv_results_['param_classifier__max_depth'] == opt_params['classifier__max_depth']) &
-                    (gsXGB.cv_results_['param_classifier__colsample_bytree'] == opt_params['classifier__colsample_bytree']) &
-                    (gsXGB.cv_results_['param_classifier__gamma'] == opt_params['classifier__gamma'])
-                ]
-            )
-        elif self.nmf:
-            nmf = NMF(init='nndsvd', random_state=24)
-            clf = xgb.XGBClassifier(objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=seed)
-            pipe = Pipeline([('nmf', nmf), ('classifier', clf)])
-            gsXGB = GridSearchCV(
-                pipe,
-                param_grid=(self.nmf_params | self.xgb_params), n_jobs=8, scoring=self.scoring_metric, refit=True,
-                cv=StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-            )
-            gsXGB.fit(X_train, y_train)
-            opt_params = gsXGB.best_params_
-            opt_mean_score = np.mean(
-                gsXGB.cv_results_['mean_test_score'][
-                    (gsXGB.cv_results_['param_nmf__n_components'] == opt_params['nmf__n_components']) & 
-                    (gsXGB.cv_results_['param_classifier__learning_rate'] == opt_params['classifier__learning_rate']) &
-                    (gsXGB.cv_results_['param_classifier__max_depth'] == opt_params['classifier__max_depth']) &
-                    (gsXGB.cv_results_['param_classifier__colsample_bytree'] == opt_params['classifier__colsample_bytree']) &
-                    (gsXGB.cv_results_['param_classifier__gamma'] == opt_params['classifier__gamma'])
-                ]
-            )
-        # xgb_clf = xgb.XGBClassifier(
-        #     objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=seed,
-        #     learning_rate=opt_params['classifier__learning_rate'], max_depth=opt_params['classifier__max_depth'],
-        #     colsample_bytree=opt_params['classifier__colsample_bytree'], gamma=opt_params['classifier__gamma']
-        # )
-        # pipe = Pipeline([('scaler', scaler), ('classifier', clf)])
-        # pipe.fit(X_train, y_train)
-        return opt_params, opt_mean_score, gsXGB.best_estimator_ # pipe
 
     ## Function that will take classifier and evaluate on test set
     def evaluate_model(self, clf, X_test, y_test, multiclass=False):

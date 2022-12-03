@@ -53,7 +53,7 @@ print(f'X_test shape: {X_test.shape}')
 print(f'y_train shape: {y_train.shape}')
 print(f'y_test shape: {y_test.shape}')
 
-m = ClassicalML(scoring_metric=scoring, nmf=nmf, standardscale=False)
+m = ClassicalML(scoring_metric=scoring, nmf=nmf, standardscale=True)
 
 m.record_tuning(X_train, y_train, X_test, y_test, outfn=outfn, multiclass=False)
 
