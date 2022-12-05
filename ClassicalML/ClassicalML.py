@@ -38,28 +38,13 @@ class ClassicalML():
             raise ValueError('Cannot have both nmf=True and standardscale=True because ' \
                              'standard-scaling results in negative values.')
         self.models = {
-            'LRM' : LogisticRegression(
-                penalty='l2', class_weight='balanced', max_iter=3000, random_state=self.seed
-            ),
-            'LASSO' : LogisticRegression(
-                penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=self.seed
-            ),
-            'ElasticNet' : LogisticRegression(
-                penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=self.seed
-            ),
-            'SVM' : SVC(
-                class_weight='balanced', max_iter=3000, probability=True, random_state=self.seed
-            ), #, decision_function_shape='ovr'
-            'RF' : RandomForestClassifier(
-                n_estimators=300, criterion='gini', max_features='auto', 
-                class_weight='balanced', n_jobs=8, random_state=self.seed
-            ),
-            'GB' : GradientBoostingClassifier(
-                subsample=0.8, random_state=self.seed
-            ),
-            'XGB' : xgb.XGBClassifier(
-                objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=self.seed
-            ),
+            'LRM' : LogisticRegression(penalty='l2', class_weight='balanced', max_iter=3000, random_state=self.seed),
+            'LASSO' : LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=self.seed),
+            'ElasticNet' : LogisticRegression(penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=self.seed),
+            'SVM' : SVC(class_weight='balanced', max_iter=3000, probability=True, random_state=self.seed), #, decision_function_shape='ovr'
+            'RF' : RandomForestClassifier(n_estimators=300, criterion='gini', max_features='sqrt', class_weight='balanced', n_jobs=8, random_state=self.seed),
+            'GB' : GradientBoostingClassifier(subsample=0.8, random_state=self.seed),
+            'XGB' : xgb.XGBClassifier(objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=self.seed),
         }
         self.model_params = {
             'LRM' : {
@@ -83,7 +68,7 @@ class ClassicalML():
                 'classifier__min_samples_leaf' : [2, 4, 6, 8, 10, 15, 20]
             },
             'GB' : {
-                'classifier__loss' : ['deviance', 'exponential'],
+                'classifier__loss' : ['log_loss', 'exponential'],
                 'classifier__min_samples_split' : [2, 6, 10, 15, 20],
                 'classifier__max_depth' : [5, 10, 25, 50, 75]
             },
@@ -119,6 +104,8 @@ class ClassicalML():
             max_k = np.min((max_k, X_train.shape[0], X_train.shape[1]))
             if max_k >= 500:
                 self.nmf_params = {'nmf__n_components' : [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]}
+            elif max_k < 25:
+                self.nmf_params = {'nmf__n_components' : list(np.arange(2, max_k+1, 2))}
             else:
                 max_k = (max_k // 100) * 100 # for example, if max_k=467, this sets max_k=400
                 self.nmf_params = {'nmf__n_components' : list(np.arange(25, max_k+1, 25))}
@@ -157,8 +144,8 @@ class ClassicalML():
             pipe = Pipeline([('classifier', clf)])
         # 
         gsCV = GridSearchCV(
-            pipe,
-            param_grid=(self.nmf_params | self.model_params[model_name]), n_jobs=8, scoring=self.scoring_metric, refit=True,
+            pipe, param_grid=(self.nmf_params | self.model_params[model_name]), 
+            n_jobs=8, scoring=self.scoring_metric, refit=True,
             cv=StratifiedKFold(n_splits=5, random_state=self.seed, shuffle=True)
         )
         gsCV.fit(X_train, y_train)
