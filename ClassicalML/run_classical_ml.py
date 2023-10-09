@@ -9,8 +9,8 @@ from sklearn.metrics import roc_curve, auc, roc_auc_score, confusion_matrix
 import matplotlib.pyplot as plt
 from ClassicalML import ClassicalML
 
-opts, extraparams = getopt.getopt(sys.argv[1:], 'i:l:o:d:s:n:', 
-                                  ['input=', 'label=', 'outdir=', 'indexdir=', 'scoring=', 'nmf='])
+opts, extraparams = getopt.getopt(sys.argv[1:], 'i:l:o:d:s:n:c:', 
+                                  ['input=', 'label=', 'outdir=', 'indexdir=', 'scoring=', 'nmf=', 'n_cpu='])
 
 scoring = 'accuracy' # default accuracy score
 nmf = False
@@ -30,6 +30,8 @@ for o,p in opts:
         scoring = p
     if o in ['-n', '--nmf']:
         nmf = True # max components ignored for now
+    if o in ['-c', '--n_cpu']:
+        n_cpu = int(p)
 
 X = pd.read_csv(inputfn, index_col=0)
 y = pd.read_csv(labfn, index_col=0)
@@ -38,14 +40,16 @@ train_ix = pd.read_csv(f'{indexdir}/train_index.txt', header=None).to_numpy().ra
 test_ix = pd.read_csv(f'{indexdir}/test_index.txt', header=None).to_numpy().ravel()
 
 # split based on indices 
-X_train, X_test = X.iloc[[i in train_ix for i in X.index],:], X.iloc[[i in test_ix for i in X.index],:]
-y_train, y_test = y.iloc[[i in train_ix for i in y.index],:], y.iloc[[i in test_ix for i in y.index],:]
+# X_train, X_test = X.iloc[[i in train_ix for i in X.index],:], X.iloc[[i in test_ix for i in X.index],:]
+# y_train, y_test = y.iloc[[i in train_ix for i in y.index],:], y.iloc[[i in test_ix for i in y.index],:]
 # X_train, X_test = X.iloc[train_ix,:], X.iloc[test_ix,:]
 # y_train, y_test = y.iloc[train_ix,:], y.iloc[test_ix,:]
+X_train, X_test = X.loc[train_ix,:], X.loc[test_ix,:]
+y_train, y_test = y.loc[train_ix,:], y.loc[test_ix,:]
 
-# align order
-y_train = y_train.loc[X_train.index,:]
-y_test = y_test.loc[X_test.index,:]
+# # align order
+# y_train = y_train.loc[X_train.index,:]
+# y_test = y_test.loc[X_test.index,:]
 
 # print shapes 
 print(f'X_train shape: {X_train.shape}')
@@ -60,7 +64,7 @@ outfn = f'{outdir}/{date}_performance_{inputname}.csv'
 if nmf:
     standardscale = False
 
-m = ClassicalML(scoring_metric=scoring, nmf=nmf, standardscale=standardscale)
+m = ClassicalML(scoring_metric=scoring, nmf=nmf, standardscale=standardscale, n_cpu=n_cpu)
 m.record_tuning(X_train, y_train, X_test, y_test, outfn=outfn, multiclass=False)
 
 best_modelname = m.best_model_name
@@ -72,9 +76,9 @@ with open(f'{outdir}/{date}_saved_best_{best_modelname}_{inputname}.p', 'wb') as
 #### Plot ROC Curve ####
 ########################
 
-n_classes = len(y_test['label'].unique())
+n_classes = len(y_test.iloc[:,0].unique())
 
-y_score = best_model.decision_function(X_test)
+y_score = best_model.predict_proba(X_test)[:,1] # decision_function
 
 if n_classes==2: # binary 
     fpr, tpr, _ = roc_curve(y_test, y_score)

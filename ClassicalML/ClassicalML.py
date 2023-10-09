@@ -28,8 +28,9 @@ from sklearn.decomposition import NMF
 import matplotlib.pyplot as plt
 
 class ClassicalML():
-    def __init__(self, scoring_metric='accuracy', nmf=False, standardscale=True, seed=42):
+    def __init__(self, scoring_metric='accuracy', nmf=False, standardscale=True, n_cpu=8, seed=42):
         super(ClassicalML).__init__()
+        self.n_cpu = n_cpu
         self.seed = seed
         self.scoring_metric = scoring_metric
         self.nmf = nmf
@@ -38,13 +39,27 @@ class ClassicalML():
             raise ValueError('Cannot have both nmf=True and standardscale=True because ' \
                              'standard-scaling results in negative values.')
         self.models = {
-            'LRM' : LogisticRegression(penalty='l2', class_weight='balanced', max_iter=3000, random_state=self.seed),
-            'LASSO' : LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=self.seed),
-            'ElasticNet' : LogisticRegression(penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=self.seed),
-            'SVM' : SVC(class_weight='balanced', max_iter=3000, probability=True, random_state=self.seed), #, decision_function_shape='ovr'
-            'RF' : RandomForestClassifier(n_estimators=300, criterion='gini', max_features='sqrt', class_weight='balanced', n_jobs=8, random_state=self.seed),
-            'GB' : GradientBoostingClassifier(subsample=0.8, random_state=self.seed),
-            'XGB' : xgb.XGBClassifier(objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=self.seed),
+            'LRM' : LogisticRegression(
+                penalty='l2', class_weight='balanced', max_iter=3000, random_state=self.seed
+            ),
+            'LASSO' : LogisticRegression(
+                penalty='l1', solver='liblinear', class_weight='balanced', max_iter=3000, random_state=self.seed
+            ),
+            'ElasticNet' : LogisticRegression(
+                penalty='elasticnet', solver='saga', class_weight='balanced', max_iter=3000, random_state=self.seed
+            ),
+            'SVM' : SVC(
+                class_weight='balanced', max_iter=3000, probability=True, random_state=self.seed
+            ), #, decision_function_shape='ovr'
+            'RF' : RandomForestClassifier(
+                n_estimators=300, criterion='gini', class_weight='balanced', random_state=self.seed
+            ),
+            'GB' : GradientBoostingClassifier(
+                subsample=0.8, random_state=self.seed
+            ),
+            'XGB' : xgb.XGBClassifier(
+                objective='reg:logistic', subsample=1, reg_alpha=0, reg_lambda=1, n_estimators=300, seed=self.seed
+            ),
         }
         self.model_params = {
             'LRM' : {
@@ -145,7 +160,7 @@ class ClassicalML():
         # 
         gsCV = GridSearchCV(
             pipe, param_grid=(self.nmf_params | self.model_params[model_name]), 
-            n_jobs=8, scoring=self.scoring_metric, refit=True,
+            n_jobs=self.n_cpu, scoring=self.scoring_metric, refit=True,
             cv=StratifiedKFold(n_splits=5, random_state=self.seed, shuffle=True)
         )
         gsCV.fit(X_train, y_train)
