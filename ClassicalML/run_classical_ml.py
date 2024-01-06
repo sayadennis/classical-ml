@@ -1,12 +1,18 @@
-import os
-import sys
-import getopt
+# pylint: disable=C0114
+# pylint: disable=E1102
+# pylint: disable=C0209
+
 import datetime
+import getopt
+import pickle
+import sys
+from itertools import cycle
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pickle
-from sklearn.metrics import roc_curve, auc, roc_auc_score, confusion_matrix
-import matplotlib.pyplot as plt
+from sklearn.metrics import auc, confusion_matrix, roc_curve
+
 from ClassicalML import ClassicalML
 
 opts, extraparams = getopt.getopt(
@@ -84,11 +90,7 @@ if n_classes == 2:  # binary
     plt.figure()
     lw = 2
     plt.plot(
-        fpr,
-        tpr,
-        color="darkorange",
-        lw=lw,
-        label="ROC curve (area = %0.2f)" % roc_auc,
+        fpr, tpr, color="darkorange", lw=lw, label=f"ROC curve (area = {roc_auc:.2f})"
     )
     plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
     plt.xlim([0.0, 1.0])
@@ -100,9 +102,9 @@ if n_classes == 2:  # binary
     plt.savefig(f"{outdir}/{date}_ROC_best_{best_modelname}_{inputname}.png")
     plt.close()
 else:  # multiclass
-    fpr = dict()
-    tpr = dict()
-    roc_auc = dict()
+    fpr = {}
+    tpr = {}
+    roc_auc = {}
     for i in range(n_classes):
         fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
