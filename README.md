@@ -25,18 +25,17 @@ The tool output includes the model artifact and a range of performance metrics o
 ### Running the CLI
 
 ```
-python ClassicalML/run_classical_ml.py \
+python classical-ml/ClassicalML/run_classical_ml.py \
     --input path/to/read/input.csv \
     --label path/to/read/target.csv \
-    --outfn path/to/write/performance.csv \
-    --indexdir path/to/read/indices/ # index files should be named train_ix.csv and test_ix.csv \
-    --scoring roc_auc # sklearn's metric name \
-    --nmf 500 # number of max components if performing NMF \
-    --savemodel path/to/save/model_artifact.p # will be save as a pickle file
+    --outdir path/to/directory/to/write/outputs/ \
+    --indexdir path/to/read/indices/ # index files should be named train_index.txt and test_index.txt \
+    --scoring roc_auc \
+    --nmf 500;
 ```
 
 ### Data setup 
 
-* Input -- `pandas.DataFrame` with index and columns included (index will be used to align matrix with target) 
-* Target -- `pandas.DataFrame` with shape `(-1,1)`. Must be consistent with input. 
-* Train-test indices -- TXT file with train/test indices. Must be consistent with input and target. 
+* Input -- CSV with a header row and an index column 
+* Target -- CSV with a header row and an index column with shape `(-1,1)`. Index must be consistent with input. 
+* Train-test indices -- TXT file with train/test indices. Must be consistent with input and target indices. 

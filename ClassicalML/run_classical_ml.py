@@ -9,81 +9,78 @@ from sklearn.metrics import roc_curve, auc, roc_auc_score, confusion_matrix
 import matplotlib.pyplot as plt
 from ClassicalML import ClassicalML
 
-opts, extraparams = getopt.getopt(sys.argv[1:], 'i:l:o:d:s:n:c:', 
-                                  ['input=', 'label=', 'outdir=', 'indexdir=', 'scoring=', 'nmf=', 'n_cpu='])
+opts, extraparams = getopt.getopt(
+    sys.argv[1:],
+    "i:l:o:d:s:n:c:",
+    ["input=", "label=", "outdir=", "indexdir=", "scoring=", "nmf=", "n_cpu="],
+)
 
-scoring = 'accuracy' # default accuracy score
+scoring = "accuracy"  # default accuracy score
 nmf = False
 standardscale = True
 save_model = False
 
-for o,p in opts:
-    if o in ['-i', '--input']:
+for o, p in opts:
+    if o in ["-i", "--input"]:
         inputfn = p
-    if o in ['-l', '--label']:
+    if o in ["-l", "--label"]:
         labfn = p
-    if o in ['-o', '--outdir']:
+    if o in ["-o", "--outdir"]:
         outdir = p
-    if o in ['-d', '--indexdir']:
+    if o in ["-d", "--indexdir"]:
         indexdir = p
-    if o in ['-s', '--scoring']:
+    if o in ["-s", "--scoring"]:
         scoring = p
-    if o in ['-n', '--nmf']:
-        nmf = True # max components ignored for now
-    if o in ['-c', '--n_cpu']:
+    if o in ["-n", "--nmf"]:
+        nmf = True  # max components ignored for now
+    if o in ["-c", "--n_cpu"]:
         n_cpu = int(p)
 
 X = pd.read_csv(inputfn, index_col=0)
 y = pd.read_csv(labfn, index_col=0)
 
-train_ix = pd.read_csv(f'{indexdir}/train_index.txt', header=None).to_numpy().ravel()
-test_ix = pd.read_csv(f'{indexdir}/test_index.txt', header=None).to_numpy().ravel()
+train_ix = pd.read_csv(f"{indexdir}/train_index.txt", header=None).to_numpy().ravel()
+test_ix = pd.read_csv(f"{indexdir}/test_index.txt", header=None).to_numpy().ravel()
 
-# split based on indices 
-# X_train, X_test = X.iloc[[i in train_ix for i in X.index],:], X.iloc[[i in test_ix for i in X.index],:]
-# y_train, y_test = y.iloc[[i in train_ix for i in y.index],:], y.iloc[[i in test_ix for i in y.index],:]
-# X_train, X_test = X.iloc[train_ix,:], X.iloc[test_ix,:]
-# y_train, y_test = y.iloc[train_ix,:], y.iloc[test_ix,:]
-X_train, X_test = X.loc[train_ix,:], X.loc[test_ix,:]
-y_train, y_test = y.loc[train_ix,:], y.loc[test_ix,:]
+# split based on indices
+X_train, X_test = X.loc[train_ix, :], X.loc[test_ix, :]
+y_train, y_test = y.loc[train_ix, :], y.loc[test_ix, :]
 
-# # align order
-# y_train = y_train.loc[X_train.index,:]
-# y_test = y_test.loc[X_test.index,:]
+# print shapes
+print(f"X_train shape: {X_train.shape}")
+print(f"X_test shape: {X_test.shape}")
+print(f"y_train shape: {y_train.shape}")
+print(f"y_test shape: {y_test.shape}")
 
-# print shapes 
-print(f'X_train shape: {X_train.shape}')
-print(f'X_test shape: {X_test.shape}')
-print(f'y_train shape: {y_train.shape}')
-print(f'y_test shape: {y_test.shape}')
-
-inputname = inputfn.split('/')[-1].split('.')[0]
-date = datetime.datetime.now().strftime('%Y%m%d')
-outfn = f'{outdir}/{date}_performance_{inputname}.csv'
+inputname = inputfn.split("/")[-1].split(".")[0]
+date = datetime.datetime.now().strftime("%Y%m%d")
+outfn = f"{outdir}/{date}_performance_{inputname}.csv"
 
 if nmf:
     standardscale = False
 
-m = ClassicalML(scoring_metric=scoring, nmf=nmf, standardscale=standardscale, n_cpu=n_cpu)
+m = ClassicalML(
+    scoring_metric=scoring, nmf=nmf, standardscale=standardscale, n_cpu=n_cpu
+)
 m.record_tuning(X_train, y_train, X_test, y_test, outfn=outfn, multiclass=False)
 
 best_modelname = m.best_model_name
 best_model = m.best_model
-with open(f'{outdir}/{date}_saved_best_{best_modelname}_{inputname}.p', 'wb') as f:
+with open(f"{outdir}/{date}_saved_best_{best_modelname}_{inputname}.p", "wb") as f:
     pickle.dump(best_model, f)
 
 ########################
 #### Plot ROC Curve ####
 ########################
 
-n_classes = len(y_test.iloc[:,0].unique())
+n_classes = len(y_test.iloc[:, 0].unique())
 
-y_score = best_model.predict_proba(X_test)[:,1] # decision_function
+y_score = best_model.predict_proba(X_test)[:, 1]  # decision_function
 
-if n_classes==2: # binary 
+if n_classes == 2:  # binary
     fpr, tpr, _ = roc_curve(y_test, y_score)
     roc_auc = auc(fpr, tpr)
-    # plot 
+    # plot
     plt.figure()
     lw = 2
     plt.plot(
@@ -100,16 +97,16 @@ if n_classes==2: # binary
     plt.ylabel("True Positive Rate")
     plt.title("Receiver operating characteristic")
     plt.legend(loc="lower right")
-    plt.savefig(f'{outdir}/{date}_ROC_best_{best_modelname}_{inputname}.png')
+    plt.savefig(f"{outdir}/{date}_ROC_best_{best_modelname}_{inputname}.png")
     plt.close()
-else: # multiclass 
+else:  # multiclass
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
     for i in range(n_classes):
         fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
-    
+
     # Compute micro-average ROC curve and ROC area
     fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
@@ -166,7 +163,7 @@ else: # multiclass
     plt.ylabel("True Positive Rate")
     plt.title("Receiver Pperating Characteristic")
     plt.legend(loc="lower right")
-    plt.savefig(f'{outdir}/{date}_ROC_best_{best_modelname}_{inputname}.png')
+    plt.savefig(f"{outdir}/{date}_ROC_best_{best_modelname}_{inputname}.png")
     plt.close()
 
 ###############################
@@ -177,5 +174,5 @@ y_test_pred = best_model.predict(X_test)
 
 cm = confusion_matrix(y_test, y_test_pred)
 pd.DataFrame(
-    cm, index=['true neg', 'true pos'], columns=['pred neg', 'pred pos']
-).to_csv(f'{outdir}/{date}_confusion_mx_best_{best_modelname}_{inputname}.csv')
+    cm, index=["true neg", "true pos"], columns=["pred neg", "pred pos"]
+).to_csv(f"{outdir}/{date}_confusion_mx_best_{best_modelname}_{inputname}.csv")
