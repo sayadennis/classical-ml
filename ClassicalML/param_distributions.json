@@ -1,0 +1,132 @@
+{
+    "LRM": {
+        "classifier__C": [
+            0.001,
+            0.01,
+            0.1,
+            1.0,
+            10.0,
+            100.0,
+            1000.0
+        ]
+    },
+    "LASSO": {
+        "classifier__C": [
+            0.001,
+            0.01,
+            0.1,
+            1.0,
+            10.0,
+            100.0,
+            1000.0
+        ]
+    },
+    "ElasticNet": {
+        "classifier__C": [
+            0.001,
+            0.01,
+            0.1,
+            1.0,
+            10.0,
+            100.0,
+            1000.0
+        ],
+        "classifier__l1_ratio": [
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9
+        ]
+    },
+    "SVM": {
+        "classifier__kernel": [
+            "linear",
+            "rbf"
+        ],
+        "classifier__C": [
+            0.001,
+            0.01,
+            0.1,
+            1.0,
+            10.0,
+            100.0,
+            1000.0
+        ],
+        "classifier__gamma": [
+            0.001,
+            0.01,
+            0.1,
+            1.0,
+            10.0,
+            100.0,
+            1000.0
+        ]
+    },
+    "RF": {
+        "classifier__max_depth": [
+            3,
+            5,
+            10,
+            25,
+            50
+        ],
+        "classifier__min_samples_leaf": [
+            2,
+            4,
+            6,
+            8,
+            10,
+            15,
+            20
+        ]
+    },
+    "GB": {
+        "classifier__loss": [
+            "log_loss",
+            "exponential"
+        ],
+        "classifier__min_samples_split": [
+            2,
+            6,
+            10,
+            15,
+            20
+        ],
+        "classifier__max_depth": [
+            5,
+            10,
+            25,
+            50,
+            75
+        ]
+    },
+    "XGB": {
+        "classifier__learning_rate": [
+            0.01,
+            0.1,
+            0.2
+        ],
+        "classifier__max_depth": [
+            5,
+            10,
+            15,
+            25
+        ],
+        "classifier__colsample_bytree": [
+            0.3,
+            0.5,
+            0.7,
+            0.9
+        ],
+        "classifier__gamma": [
+            0.1,
+            1,
+            2
+        ]
+    }
+}

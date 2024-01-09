@@ -8,6 +8,7 @@ Module: ClassicalML
 
 This module provides the class to perform cross-validation across multiple models.
 """
+import json
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,9 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.svm import SVC
 
 # from numpy import interp
+
+with open("param_distributions.json", "r", encoding="utf-8") as f:
+    PARAM_DIST = json.load(f)
 
 
 class ClassicalML:
@@ -102,41 +106,6 @@ class ClassicalML:
                 n_estimators=300,
                 seed=self.seed,
             ),
-        }
-        self.model_params = {
-            "LRM": {"classifier__C": [1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3]},
-            "LASSO": {"classifier__C": [1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3]},
-            "ElasticNet": {
-                "classifier__C": [1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3],
-                "classifier__l1_ratio": np.arange(0.1, 1.0, step=0.1),
-            },
-            "SVM": {
-                "classifier__kernel": ["linear", "rbf"],
-                "classifier__C": [1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3],
-                "classifier__gamma": [1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3],
-            },  # , decision_function_shape='ovr'
-            "RF": {
-                # 'criterion' : ['gini', 'entropy'],
-                "classifier__max_depth": [
-                    3,
-                    5,
-                    10,
-                    25,
-                    50,
-                ],  # or could set min_samples_split
-                "classifier__min_samples_leaf": [2, 4, 6, 8, 10, 15, 20],
-            },
-            "GB": {
-                "classifier__loss": ["log_loss", "exponential"],
-                "classifier__min_samples_split": [2, 6, 10, 15, 20],
-                "classifier__max_depth": [5, 10, 25, 50, 75],
-            },
-            "XGB": {
-                "classifier__learning_rate": [0.01, 0.1, 0.2],
-                "classifier__max_depth": [5, 10, 15, 25],
-                "classifier__colsample_bytree": [0.3, 0.5, 0.7, 0.9],
-                "classifier__gamma": [0.1, 1, 2],
-            },
         }
         self.best_model_name = None
         self.best_model = None
@@ -265,7 +234,7 @@ class ClassicalML:
         #
         gsCV = GridSearchCV(
             pipe,
-            param_grid=(self.nmf_params | self.model_params[model_name]),
+            param_grid=(self.nmf_params | PARAM_DIST[model_name]),
             n_jobs=self.n_cpu,
             scoring=self.scoring_metric,
             refit=True,
