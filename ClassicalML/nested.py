@@ -40,12 +40,12 @@ def run(
     - n_splits: number of CV splits to average across overall
     """
     performance = pd.DataFrame(
-        index=[f"fold {k}" for k in np.arange(folds)],
+        index=[f"fold {k}" for k in np.arange(folds)] + ["average"],
         columns=[f"CV {l}" for l in np.arange(n_splits)]
         + [f"test {l}" for l in np.arange(n_splits)],
     )
     for split in range(n_splits):
-        print(f"\n#### Split {split+1}/{n_splits} ####")
+        print(f"Running split {split+1}/{n_splits}...")
         # First layer of split
         skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed + split)
         cv_scores = []
@@ -89,9 +89,14 @@ def run(
             test_scores.append(test_score)
         # Average test scores across the initial 5 folds
         avg_cv_score = np.mean(cv_scores)
-        print(f"Average CV score: {avg_cv_score:.4f}")
+        performance.loc["average", f"CV {split}"] = avg_cv_score
         avg_test_score = np.mean(test_scores)
-        print(f"Average test score: {avg_test_score:.4f}\n")
+        performance.loc["average", f"test {split}"] = avg_test_score
+    performance.loc["average", :] = (
+        performance.loc[[f"fold {l}" for l in np.arange(folds)], :]
+        .mean(axis=0)
+        .values.ravel()
+    )
     print(performance)
 
 
@@ -104,4 +109,4 @@ if __name__ == "__main__":
         custom_X = pd.read_csv(args[1], index_col=0, header=0)
         custom_y = pd.read_csv(args[2], index_col=0, header=0).iloc[:, 0]
         N_CPU = int(args[3])
-        run(custom_X, custom_y, n_splits=2)
+        run(custom_X, custom_y, n_splits=5)
