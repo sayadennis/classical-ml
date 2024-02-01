@@ -7,6 +7,8 @@ Module: nested
 This module provides tools for nested cross validation.
 """
 
+import sys
+
 import numpy as np
 import pandas as pd
 from sklearn import metrics
@@ -37,6 +39,11 @@ def run(
     - seed: random state for splits and model initialization
     - n_splits: number of CV splits to average across overall
     """
+    performance = pd.DataFrame(
+        index=[f"fold {k}" for k in np.arange(folds)],
+        columns=[f"CV {l}" for l in np.arange(n_splits)]
+        + [f"test {l}" for l in np.arange(n_splits)],
+    )
     for split in range(n_splits):
         print(f"\n#### Split {split+1}/{n_splits} ####")
         # First layer of split
@@ -49,7 +56,7 @@ def run(
             y_train, y_test = y.iloc[train_index], y.iloc[test_index]
             # Run grid search on layer 1 training set (second layer of split)
             scaler = StandardScaler()
-            clf = RandomForestClassifier()
+            clf = RandomForestClassifier(random_state=seed)
             pipe = Pipeline([("scaler", scaler), ("classifier", clf)])
             gsCV = GridSearchCV(
                 pipe,
@@ -72,19 +79,29 @@ def run(
                     )
                 ]
             )
-            print(f"Best mean score for fold {i}: {opt_mean_score:.4f}")
+            performance.loc[f"fold {i}", f"CV {split}"] = opt_mean_score
             cv_scores.append(opt_mean_score)
             y_pred = gsCV.predict_proba(X_test)
+            if y_pred.shape[1] == 2:  # if binary class
+                y_pred = y_pred[:, 1]
             test_score = metrics.roc_auc_score(y_test, y_pred, multi_class="ovr")
-            print(f"Test score for fold {i}: {test_score:.4f}\n")
+            performance.loc[f"fold {i}", f"test {split}"] = test_score
             test_scores.append(test_score)
         # Average test scores across the initial 5 folds
         avg_cv_score = np.mean(cv_scores)
         print(f"Average CV score: {avg_cv_score:.4f}")
         avg_test_score = np.mean(test_scores)
         print(f"Average test score: {avg_test_score:.4f}\n")
+    print(performance)
 
 
 if __name__ == "__main__":
-    iris_X, iris_y = load_iris(return_X_y=True, as_frame=True)
-    run(iris_X, iris_y, n_splits=2)
+    args = sys.argv
+    if len(args) == 1:  # no arguments
+        iris_X, iris_y = load_iris(return_X_y=True, as_frame=True)
+        run(iris_X, iris_y, n_splits=2)
+    else:
+        custom_X = pd.read_csv(args[1], index_col=0, header=0)
+        custom_y = pd.read_csv(args[2], index_col=0, header=0).iloc[:, 0]
+        N_CPU = int(args[3])
+        run(custom_X, custom_y, n_splits=2)
