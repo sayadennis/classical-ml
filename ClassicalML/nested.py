@@ -67,8 +67,6 @@ def run(
         print(f"Running split {split+1}/{n_splits}...")
         # First layer of split
         skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed + split)
-        cv_scores = []
-        test_scores = []
         for i, (train_index, test_index) in enumerate(skf.split(X, y)):
             # Define training set and test set
             X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
@@ -112,25 +110,18 @@ def run(
                 ]
             )
             performance.loc[f"Fold {i}", f"CV ROC {split}"] = opt_mean_score
-            cv_scores.append(opt_mean_score)
             y_pred = gsCV.predict(X_test)
             y_prob = gsCV.predict_proba(X_test)
             if y_prob.shape[1] == 2:  # if binary class
                 y_prob = y_prob[:, 1]
-            test_score = metrics.roc_auc_score(y_test, y_prob, multi_class="ovr")
+            test_roc = metrics.roc_auc_score(y_test, y_prob, multi_class="ovr")
             test_prec = metrics.precision_score(y_test, y_pred)
             test_recall = metrics.recall_score(y_test, y_pred)
             test_f1 = metrics.f1_score(y_test, y_pred)
-            performance.loc[f"Fold {i}", f"Test ROC {split}"] = test_score
+            performance.loc[f"Fold {i}", f"Test ROC {split}"] = test_roc
             performance.loc[f"Fold {i}", f"Test Precision {split}"] = test_prec
             performance.loc[f"Fold {i}", f"Test Recall {split}"] = test_recall
             performance.loc[f"Fold {i}", f"Test F1 {split}"] = test_f1
-            test_scores.append(test_score)
-        # Average test scores across the initial 5 folds
-        avg_cv_score = np.mean(cv_scores)
-        performance.loc["Average", f"CV ROC {split}"] = avg_cv_score
-        avg_test_score = np.mean(test_scores)
-        performance.loc["Average", f"Test ROC {split}"] = avg_test_score
     performance.loc["Average", :] = (
         performance.loc[[f"Fold {l}" for l in np.arange(folds)], :]
         .mean(axis=0)
