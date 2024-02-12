@@ -1,5 +1,6 @@
 # pylint: disable=attribute-defined-outside-init
 # pylint: disable=too-many-locals
+# pylint: disable=too-many-arguments
 
 """
 Module: nested
@@ -7,27 +8,36 @@ Module: nested
 This module provides tools for nested cross validation.
 """
 
+import json
+import os
 import sys
 
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from sklearn import metrics
 from sklearn.datasets import load_iris
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 N_CPU = 4
 SCORING_METRIC = "roc_auc_ovr"
-PARAM_DIST = {
-    "classifier__max_depth": [3, 5, 10, 25, 50],
-    "classifier__min_samples_leaf": [2, 4, 6, 8, 10, 15, 20],
-}
+with open(
+    f"{os.path.dirname(os.path.realpath(__file__))}/param_distributions.json",
+    "r",
+    encoding="utf-8",
+) as f:
+    PARAM_DIST = json.load(f)["XGB"]
 
 
 def run(
-    X: pd.DataFrame, y: pd.DataFrame, folds: int = 5, seed: int = 8, n_splits: int = 1
+    X: pd.DataFrame,
+    y: pd.DataFrame,
+    folds: int = 5,
+    seed: int = 8,
+    n_splits: int = 1,
+    outfn: str = "performance.csv",
 ):
     """
     Run nested cross validation.
@@ -39,11 +49,17 @@ def run(
     - seed: random state for splits and model initialization
     - n_splits: number of CV splits to average across overall
     """
+    # Align input and target dataframes by index
+    overlap = list(set(X.index).intersection(y.index))
+    X = X.loc[overlap, :]
+    y = y.loc[overlap]
+    # Create empty dataframe to record performance
     performance = pd.DataFrame(
         index=[f"fold {k}" for k in np.arange(folds)] + ["average"],
         columns=[f"CV {l}" for l in np.arange(n_splits)]
         + [f"test {l}" for l in np.arange(n_splits)],
     )
+    # Go over splits
     for split in range(n_splits):
         print(f"Running split {split+1}/{n_splits}...")
         # First layer of split
@@ -56,7 +72,20 @@ def run(
             y_train, y_test = y.iloc[train_index], y.iloc[test_index]
             # Run grid search on layer 1 training set (second layer of split)
             scaler = StandardScaler()
-            clf = RandomForestClassifier(random_state=seed)
+            # clf = RandomForestClassifier(
+            #    n_estimators=300,
+            #    criterion="gini",
+            #    class_weight="balanced",
+            #    random_state=seed,
+            # )
+            clf = xgb.XGBClassifier(
+                objective="reg:logistic",
+                subsample=1,
+                reg_alpha=0,
+                reg_lambda=1,
+                n_estimators=300,
+                seed=seed,
+            )
             pipe = Pipeline([("scaler", scaler), ("classifier", clf)])
             gsCV = GridSearchCV(
                 pipe,
@@ -97,7 +126,7 @@ def run(
         .mean(axis=0)
         .values.ravel()
     )
-    print(performance)
+    performance.to_csv(outfn)
 
 
 if __name__ == "__main__":
@@ -108,5 +137,6 @@ if __name__ == "__main__":
     else:
         custom_X = pd.read_csv(args[1], index_col=0, header=0)
         custom_y = pd.read_csv(args[2], index_col=0, header=0).iloc[:, 0]
-        N_CPU = int(args[3])
-        run(custom_X, custom_y, n_splits=5)
+        custom_outfn = args[3]
+        N_CPU = int(args[4])
+        run(custom_X, custom_y, n_splits=10, outfn=custom_outfn)
