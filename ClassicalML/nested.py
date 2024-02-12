@@ -55,9 +55,12 @@ def run(
     y = y.loc[overlap]
     # Create empty dataframe to record performance
     performance = pd.DataFrame(
-        index=[f"fold {k}" for k in np.arange(folds)] + ["average"],
-        columns=[f"CV {l}" for l in np.arange(n_splits)]
-        + [f"test {l}" for l in np.arange(n_splits)],
+        index=[f"Fold {k}" for k in np.arange(folds)] + ["Average"],
+        columns=[f"CV ROC {l}" for l in np.arange(n_splits)]
+        + [f"Test ROC {l}" for l in np.arange(n_splits)]
+        + [f"Test Precision {l}" for l in np.arange(n_splits)]
+        + [f"Test Recall {l}" for l in np.arange(n_splits)]
+        + [f"Test F1 {l}" for l in np.arange(n_splits)],
     )
     # Go over splits
     for split in range(n_splits):
@@ -108,21 +111,28 @@ def run(
                     )
                 ]
             )
-            performance.loc[f"fold {i}", f"CV {split}"] = opt_mean_score
+            performance.loc[f"Fold {i}", f"CV ROC {split}"] = opt_mean_score
             cv_scores.append(opt_mean_score)
-            y_pred = gsCV.predict_proba(X_test)
-            if y_pred.shape[1] == 2:  # if binary class
-                y_pred = y_pred[:, 1]
-            test_score = metrics.roc_auc_score(y_test, y_pred, multi_class="ovr")
-            performance.loc[f"fold {i}", f"test {split}"] = test_score
+            y_pred = gsCV.predict(X_test)
+            y_prob = gsCV.predict_proba(X_test)
+            if y_prob.shape[1] == 2:  # if binary class
+                y_prob = y_prob[:, 1]
+            test_score = metrics.roc_auc_score(y_test, y_prob, multi_class="ovr")
+            test_prec = metrics.precision_score(y_test, y_pred)
+            test_recall = metrics.recall_score(y_test, y_pred)
+            test_f1 = metrics.f1_score(y_test, y_pred)
+            performance.loc[f"Fold {i}", f"Test ROC {split}"] = test_score
+            performance.loc[f"Fold {i}", f"Test Precision {split}"] = test_prec
+            performance.loc[f"Fold {i}", f"Test Recall {split}"] = test_recall
+            performance.loc[f"Fold {i}", f"Test F1 {split}"] = test_f1
             test_scores.append(test_score)
         # Average test scores across the initial 5 folds
         avg_cv_score = np.mean(cv_scores)
-        performance.loc["average", f"CV {split}"] = avg_cv_score
+        performance.loc["Average", f"CV ROC {split}"] = avg_cv_score
         avg_test_score = np.mean(test_scores)
-        performance.loc["average", f"test {split}"] = avg_test_score
-    performance.loc["average", :] = (
-        performance.loc[[f"fold {l}" for l in np.arange(folds)], :]
+        performance.loc["Average", f"Test ROC {split}"] = avg_test_score
+    performance.loc["Average", :] = (
+        performance.loc[[f"Fold {l}" for l in np.arange(folds)], :]
         .mean(axis=0)
         .values.ravel()
     )
