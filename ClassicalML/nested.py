@@ -11,6 +11,7 @@ This module provides tools for nested cross validation.
 import json
 import os
 import sys
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -49,10 +50,7 @@ def run(
     - seed: random state for splits and model initialization
     - n_splits: number of CV splits to average across overall
     """
-    # Align input and target dataframes by index
-    overlap = list(set(X.index).intersection(y.index))
-    X = X.loc[overlap, :]
-    y = y.loc[overlap]
+    X, y = align(X, y)
     # Create empty dataframe to record performance
     performance = pd.DataFrame(
         index=[f"Fold {k}" for k in np.arange(folds)] + ["Average"],
@@ -83,6 +81,25 @@ def run(
         .values.ravel()
     )
     performance.to_csv(outfn)
+
+
+def align(X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
+    """
+    Align input and target by index values.
+
+    Parameters:
+        - Input
+        - Target
+
+    Returns:
+        - Aligned input
+        - Aligned target
+    """
+    # Align input and target dataframes by index
+    overlap = list(set(X.index).intersection(y.index))
+    X = X.loc[overlap, :]
+    y = y.loc[overlap]
+    return (X, y)
 
 
 def gs_hparam(X: pd.DataFrame, y: pd.DataFrame, seed: int) -> GridSearchCV:
