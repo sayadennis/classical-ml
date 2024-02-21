@@ -24,7 +24,7 @@ def run_nmf(
     outfn: str,
     folds: int = 5,
     seed: int = 38,
-    n_splits: int = 10,
+    n_splits: int = 5,
 ) -> None:
     """
     Run the nested cross validation with optionally supervised hybrid NMF.
@@ -63,8 +63,10 @@ def run_nmf(
             # Find best hyper parameters for NMF
             _, W_train, nmf_obj = crossval_hnmf(X1_train, X2_train, y_train)
             # Run grid search by an inner fold
+            W_train = pd.DataFrame(W_train.detach().numpy(), index=X1_train.index)
             gsCV = nested.gs_hparam(W_train, y_train, seed=seed)
             W_test = nmf_obj.transform(X1_test, X2_test)
+            W_test = pd.DataFrame(W_test.detach().numpy(), index=X1_test.index)
             performance = nested.record_performance(
                 gsCV, W_test, y_test, performance, fold=i, split=split
             )
@@ -74,6 +76,7 @@ def run_nmf(
         .mean(axis=0)
         .values.ravel()
     )
+    print(f"Writing results to {outfn}...")
     performance.to_csv(outfn)
 
 
@@ -162,4 +165,4 @@ if __name__ == "__main__":
         custom_y = pd.read_csv(args[3], index_col=0, header=0)
         custom_outfn = args[4]
         N_CPU = int(args[5])
-        run_nmf(custom_X1, custom_X2, custom_y, n_splits=10, outfn=custom_outfn)
+        run_nmf(custom_X1, custom_X2, custom_y, n_splits=5, outfn=custom_outfn)
