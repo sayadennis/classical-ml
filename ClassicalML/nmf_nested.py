@@ -12,8 +12,10 @@ import nested  # pylint: disable=import-error
 import numpy as np
 import pandas as pd
 import torch
+from late_fusion import align_two_inputs  # pylint: disable=import-error
 from sklearn.datasets import load_iris
 from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import MinMaxScaler
 from suphNMF import suphNMF  # pylint: disable=import-error
 
 
@@ -60,11 +62,31 @@ def run_nmf(
             X1_train, X1_test = X1.iloc[train_index, :], X1.iloc[test_index, :]
             X2_train, X2_test = X2.iloc[train_index, :], X2.iloc[test_index, :]
             y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+            # Scale all data based on the train set
+            scaler = MinMaxScaler(feature_range=(0, 30))
+            X1_train = pd.DataFrame(
+                scaler.fit_transform(X1_train),
+                index=X1_train.index,
+                columns=X1_train.columns,
+            )
+            X1_test = pd.DataFrame(
+                scaler.transform(X1_test), index=X1_test.index, columns=X1_test.columns
+            )
+            X2_train = pd.DataFrame(
+                scaler.fit_transform(X2_train),
+                index=X2_train.index,
+                columns=X2_train.columns,
+            )
+            X2_test = pd.DataFrame(
+                scaler.transform(X2_test), index=X2_test.index, columns=X2_test.columns
+            )
             # Find best hyper parameters for NMF
             _, W_train, nmf_obj = crossval_hnmf(X1_train, X2_train, y_train)
             # Run grid search by an inner fold
             W_train = pd.DataFrame(W_train.detach().numpy(), index=X1_train.index)
-            gsCV = nested.gs_hparam(W_train, y_train, seed=seed)
+            gsCV = nested.gs_hparam(
+                W_train, y_train, seed=seed, scale=False
+            )  # already standard scaled
             W_test = nmf_obj.transform(X1_test, X2_test)
             W_test = pd.DataFrame(W_test.detach().numpy(), index=X1_test.index)
             performance = nested.record_performance(
@@ -80,32 +102,11 @@ def run_nmf(
     performance.to_csv(outfn)
 
 
-def align_two_inputs(
-    X1: pd.DataFrame, X2: pd.DataFrame, y: pd.Series
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
-    """
-    Align input and target by index values.
-
-    Parameters:
-        - Input
-        - Target
-
-    Returns:
-        - Aligned input
-        - Aligned target
-    """
-    overlap = list(set(X1.index).intersection(set(X2.index)).intersection(set(y.index)))
-    X1 = X1.loc[overlap, :]
-    X2 = X2.loc[overlap, :]
-    y = y.loc[overlap]
-    return (X1, X2, y)
-
-
 def crossval_hnmf(
     X1_train: pd.DataFrame,
     X2_train: pd.DataFrame,
     y_train: pd.Series,
-    ks: Iterable[int] = np.arange(2, 12),
+    ks: Iterable[int] = np.arange(4, 12),
 ) -> Tuple[dict, pd.DataFrame, suphNMF,]:
     """
     Run cross-validation with hybrid NMF.

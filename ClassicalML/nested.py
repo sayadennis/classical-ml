@@ -1,6 +1,7 @@
 # pylint: disable=attribute-defined-outside-init
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-arguments
+# pylint: disable=no-member
 
 """
 Module: nested
@@ -10,17 +11,19 @@ This module provides tools for nested cross validation.
 
 import json
 import os
+import pickle
 import sys
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
+import shap
 import xgboost as xgb
 from sklearn import metrics
 from sklearn.datasets import load_iris
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 
 N_CPU = 4
 SCORING_METRIC = "roc_auc_ovr"
@@ -60,27 +63,69 @@ def run(
         + [f"Test Recall {l}" for l in np.arange(n_splits)]
         + [f"Test F1 {l}" for l in np.arange(n_splits)],
     )
+    # Create empty dataframe to record feature importance
+    f_imp = pd.DataFrame(
+        0.0,
+        index=[
+            f"split {split} fold {fold}"
+            for fold in range(folds)
+            for split in range(n_splits)
+        ],
+        columns=X.columns,
+    )
     # Go over splits
     for split in range(n_splits):
         print(f"Running split {split+1}/{n_splits}...")
         # First layer of split
         skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed + split)
-        for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+        for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
             # Define training set and test set
             X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
             y_train, y_test = y.iloc[train_index], y.iloc[test_index]
             # Run grid search on layer 1 training set (second layer of split)
             gsCV = gs_hparam(X_train, y_train, seed=seed)
             performance = record_performance(
-                gsCV, X_test, y_test, performance, fold=i, split=split
+                gsCV, X_test, y_test, performance, fold=fold, split=split
             )
+            f_imp.loc[
+                f"split {split} fold {fold}", gsCV.feature_names_in_
+            ] = gsCV.best_estimator_["classifier"].feature_importances_
+            # Calculate and record SHAP values
+            if split == 0:  # only do it for the first split for now
+                explainer = shap.Explainer(gsCV.best_estimator_.predict, X_train)
+                shap_fold = explainer(X_test, max_evals=515)
+                if fold == 0:
+                    shap_all = shap.Explanation(
+                        values=shap_fold.values,
+                        base_values=shap_fold.base_values,
+                        data=shap_fold.data,
+                        feature_names=shap_fold.feature_names,
+                        instance_names=list(X_test.index),
+                    )
+                else:
+                    shap_all = shap.Explanation(
+                        values=np.concatenate(
+                            [shap_all.values, shap_fold.values], axis=0
+                        ),
+                        base_values=np.concatenate(
+                            [shap_all.base_values, shap_fold.base_values], axis=0
+                        ),
+                        data=np.concatenate([shap_all.data, shap_fold.data], axis=0),
+                        feature_names=shap_all.feature_names,
+                        instance_names=list(shap_all.instance_names)
+                        + list(X_test.index),
+                    )
+                with open(outfn.rsplit(".", maxsplit=1)[0] + "_shap.p", "wb") as f:
+                    pickle.dump(shap_all, f)
     # Calculate average across folds
     performance.loc["Average", :] = (
         performance.loc[[f"Fold {l}" for l in np.arange(folds)], :]
         .mean(axis=0)
         .values.ravel()
     )
+    # Save performance and feature importance scores
     performance.to_csv(outfn)
+    f_imp.to_csv(outfn.rsplit(".", maxsplit=1)[0] + "_feature_importances.csv")
 
 
 def align(X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
@@ -102,27 +147,42 @@ def align(X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
     return (X, y)
 
 
-def gs_hparam(X: pd.DataFrame, y: pd.DataFrame, seed: int) -> GridSearchCV:
+def gs_hparam(X: pd.DataFrame, y: pd.DataFrame, seed: int, scale=True) -> GridSearchCV:
     """
     Run GridSearch with default model (XGB) and defined hyperparameters.
 
     Parameters:
         X: input.
         y: target.
+        seed: random state.
+        scale: whether to add scaler to the Pipeline
 
     Returns:
         The post-gridsearch GridSearchCV object.
     """
-    scaler = StandardScaler()
-    clf = xgb.XGBClassifier(
-        objective="reg:logistic",
-        subsample=1,
-        reg_alpha=0,
-        reg_lambda=1,
-        n_estimators=300,
-        seed=seed,
-    )
-    pipe = Pipeline([("scaler", scaler), ("classifier", clf)])
+    if scale:
+        scaler = MinMaxScaler(feature_range=(0, 30))
+        clf = xgb.XGBClassifier(
+            objective="reg:logistic",
+            subsample=1,
+            reg_alpha=0,
+            reg_lambda=1,
+            n_estimators=300,
+            seed=seed,
+            scale_pos_weight=y.sum().item() / len(y),
+        )
+        pipe = Pipeline([("scaler", scaler), ("classifier", clf)])
+    else:
+        clf = xgb.XGBClassifier(
+            objective="reg:logistic",
+            subsample=1,
+            reg_alpha=0,
+            reg_lambda=1,
+            n_estimators=300,
+            seed=seed,
+            scale_pos_weight=y.sum().item() / len(y),
+        )
+        pipe = Pipeline([("classifier", clf)])
     gsCV = GridSearchCV(
         pipe,
         param_grid=PARAM_DIST,
@@ -146,19 +206,10 @@ def record_performance(
     """
     Record performance of the grid search process.
     """
-    opt_params = gsCV.best_params_
-    opt_mean_score = np.mean(
-        gsCV.cv_results_["mean_test_score"][
-            np.all(
-                [
-                    (gsCV.cv_results_[f"param_{param_name}"] == param_vals)
-                    for param_name, param_vals in opt_params.items()
-                ],
-                axis=0,
-            )
-        ]
-    )
+    # First record CV performance
+    _, opt_mean_score = find_optimal(gsCV)
     performance.loc[f"Fold {fold}", f"CV ROC {split}"] = opt_mean_score
+    # Next record test set performance
     y_pred = gsCV.predict(X_test)
     y_prob = gsCV.predict_proba(X_test)
     if y_prob.shape[1] == 2:  # if binary class
@@ -174,6 +225,22 @@ def record_performance(
     return performance
 
 
+def find_optimal(gsobj: GridSearchCV) -> Tuple[dict, float]:
+    opt_params = gsobj.best_params_
+    opt_mean_score = np.mean(
+        gsobj.cv_results_["mean_test_score"][
+            np.all(
+                [
+                    (gsobj.cv_results_[f"param_{param_name}"] == param_vals)
+                    for param_name, param_vals in opt_params.items()
+                ],
+                axis=0,
+            )
+        ]
+    )
+    return (opt_params, opt_mean_score)
+
+
 if __name__ == "__main__":
     args = sys.argv
     if len(args) == 1:  # no arguments
@@ -184,4 +251,4 @@ if __name__ == "__main__":
         custom_y = pd.read_csv(args[2], index_col=0, header=0).iloc[:, 0]
         custom_outfn = args[3]
         N_CPU = int(args[4])
-        run(custom_X, custom_y, n_splits=10, outfn=custom_outfn)
+        run(custom_X, custom_y, n_splits=5, outfn=custom_outfn)
