@@ -58,28 +58,23 @@ def run_nmf(
         # Outer fold
         skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed + split)
         for i, (train_index, test_index) in enumerate(skf.split(X1, y)):
+            # Scale all data based on the train set
+            scaler = MinMaxScaler(feature_range=(0, 30))
+            X1 = pd.DataFrame(
+                scaler.fit_transform(X1),
+                index=X1.index,
+                columns=X1.columns,
+            )
+            scaler = MinMaxScaler(feature_range=(0, 30))
+            X2 = pd.DataFrame(
+                scaler.fit_transform(X2),
+                index=X2.index,
+                columns=X2.columns,
+            )
             # Define training set and test set
             X1_train, X1_test = X1.iloc[train_index, :], X1.iloc[test_index, :]
             X2_train, X2_test = X2.iloc[train_index, :], X2.iloc[test_index, :]
             y_train, y_test = y.iloc[train_index], y.iloc[test_index]
-            # Scale all data based on the train set
-            scaler = MinMaxScaler(feature_range=(0, 30))
-            X1_train = pd.DataFrame(
-                scaler.fit_transform(X1_train),
-                index=X1_train.index,
-                columns=X1_train.columns,
-            )
-            X1_test = pd.DataFrame(
-                scaler.transform(X1_test), index=X1_test.index, columns=X1_test.columns
-            )
-            X2_train = pd.DataFrame(
-                scaler.fit_transform(X2_train),
-                index=X2_train.index,
-                columns=X2_train.columns,
-            )
-            X2_test = pd.DataFrame(
-                scaler.transform(X2_test), index=X2_test.index, columns=X2_test.columns
-            )
             # Find best hyper parameters for NMF
             _, W_train, nmf_obj = crossval_hnmf(X1_train, X2_train, y_train)
             # Run grid search by an inner fold
@@ -106,8 +101,8 @@ def crossval_hnmf(
     X1_train: pd.DataFrame,
     X2_train: pd.DataFrame,
     y_train: pd.Series,
-    ks: Iterable[int] = np.arange(4, 12),
-) -> Tuple[dict, pd.DataFrame, suphNMF,]:
+    ks: Iterable[int] = np.arange(5, 12),
+) -> Tuple[dict, pd.DataFrame, suphNMF]:
     """
     Run cross-validation with hybrid NMF.
 
@@ -137,9 +132,7 @@ def crossval_hnmf(
             "cv_mean_roc": nmf.cv_mean_roc,
             "cv_results": cv_results,
         }
-    best_k = np.arange(4, 12)[
-        np.argmax([nmf_record[k]["cv_mean_roc"] for k in range(4, 12)])
-    ]
+    best_k = ks[np.argmax([nmf_record[k]["cv_mean_roc"] for k in ks])]
     print(f"Finished testing all Ks! Best k was {best_k} for this round.")
     best_params = nmf_record[best_k]["best_params"]
     # Refit with learned parameters
@@ -150,7 +143,10 @@ def crossval_hnmf(
         torch.tensor(y_train.values, dtype=torch.float32),
         **best_params,
     )
-    W_train = nmf.transform(X1_train, X2_train)
+    W_train = nmf.transform(X1_train, X2_train).detach().cpu().numpy()
+    W_train = pd.DataFrame(
+        W_train, index=X1_train.index, columns=np.arange(W_train.shape[1])
+    )
     print(f"Finished final fit with best k={best_k}!")
     return (best_params, W_train, nmf)
 
