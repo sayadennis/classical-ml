@@ -73,6 +73,13 @@ def run(
         ],
         columns=X.columns,
     )
+    # Create dataframe to record sample-wise performance (find hard samples)
+    sample_correct = pd.DataFrame(
+        0.0,
+        index=X.index,
+        columns=[f"split {split}" for split in range(n_splits)],
+        dtype=float,
+    )
     # Go over splits
     for split in range(n_splits):
         print(f"Running split {split+1}/{n_splits}...")
@@ -87,6 +94,8 @@ def run(
             performance = record_performance(
                 gsCV, X_test, y_test, performance, fold=fold, split=split
             )
+            correct_samples = find_correct_samples(gsCV, X_test, y_test)
+            sample_correct.loc[correct_samples, f"split {split}"] = 1.0
             f_imp.loc[
                 f"split {split} fold {fold}", gsCV.feature_names_in_
             ] = gsCV.best_estimator_["classifier"].feature_importances_
@@ -126,6 +135,7 @@ def run(
     # Save performance and feature importance scores
     performance.to_csv(outfn)
     f_imp.to_csv(outfn.rsplit(".", maxsplit=1)[0] + "_feature_importances.csv")
+    sample_correct.to_csv(outfn.rsplit(".", maxsplit=1)[0] + "_samplewise_pf.csv")
 
 
 def align(X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
@@ -223,6 +233,17 @@ def record_performance(
     performance.loc[f"Fold {fold}", f"Test Recall {split}"] = test_recall
     performance.loc[f"Fold {fold}", f"Test F1 {split}"] = test_f1
     return performance
+
+
+def find_correct_samples(
+    gsCV: GridSearchCV, X_test: pd.DataFrame, y_test: pd.DataFrame
+) -> list[int]:
+    """
+    Get the sample IDs that were correctly predicted.
+    """
+    y_pred = gsCV.predict(X_test)
+    correct = list(X_test.iloc[y_test.values == y_pred, :].index)
+    return correct
 
 
 def find_optimal(gsobj: GridSearchCV) -> Tuple[dict, float]:
